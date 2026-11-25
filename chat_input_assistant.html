@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<title>Chat Input Assistant</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d2e;--panel2:#1a2940;--line:#2b3b53;--text:#eef4ff;--muted:#a8b6ca;--accent:#8bb8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{position:sticky;top:0;background:#101827f2;backdrop-filter:blur(12px);padding:16px 16px 12px;border-bottom:1px solid var(--line);z-index:2}
+h1{font-size:20px;margin:0 0 4px}header p{margin:0;color:var(--muted);font-size:12px}
+main{max-width:760px;margin:auto;padding:16px 14px 100px}
+nav{display:flex;gap:8px;margin-bottom:14px;overflow:auto}
+nav button,.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:12px;padding:11px 14px;font-size:14px}
+nav button.active,.primary{background:#244b80;border-color:#477fca}
+section{display:none;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:15px;margin-bottom:14px}
+section.active{display:block}h2{font-size:17px;margin:0 0 12px}
+label{display:block;color:var(--muted);font-size:13px;margin:12px 0 6px}
+input,textarea,select{width:100%;background:#0b1422;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);font:inherit}
+textarea{min-height:110px;resize:vertical;line-height:1.5}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.actions button{flex:1;min-width:110px}
+.small{font-size:12px;color:var(--muted);line-height:1.5}
+#composer{min-height:150px}
+.card{background:#0c1727;border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+.card p{white-space:pre-wrap;line-height:1.5;margin:8px 0}
+.badge{font-size:11px;color:#b9d4ff}
+footer{position:fixed;bottom:0;left:0;right:0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#101827f2;border-top:1px solid var(--line);backdrop-filter:blur(12px)}
+footer .inner{max-width:760px;margin:auto;display:flex;gap:8px}
+footer button{font-size:20px;min-width:54px}
+footer .send{font-size:14px}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+</style>
+</head>
+<body>
+<header><h1>Chat Input Assistant</h1><p>プロフィール・会話メモ・返信候補を管理する試作版</p></header>
+<main>
+<nav>
+<button class="active" data-tab="chat">チャット補助</button>
+<button data-tab="profile">プロフィール</button>
+<button data-tab="history">会話履歴</button>
+</nav>
+<section id="chat" class="active">
+<h2>入力アシスタント</h2>
+<p class="small">このアプリはChatGPT本体とは別の独立した画面です。ここで作った文章をコピーしてChatGPTに貼り付けてください。</p>
+<label for="context">現在の会話メモ（直近のやり取りを貼り付け）</label>
+<textarea id="context" placeholder="相手と自分の直近の会話を貼り付けます…"></textarea>
+<label for="composer">返信文・メッセージ</label>
+<textarea id="composer" placeholder="ここに文章を入力…"></textarea>
+<div class="actions">
+<button class="btn" id="generate">✏️ 返信候補を3つ作る</button>
+<button class="btn" id="saveTurn">会話メモを保存</button>
+</div>
+<div id="suggestions"></div>
+</section>
+<section id="profile">
+<h2>{user} プロフィール</h2>
+<label for="nickname">呼び名</label><input id="nickname" placeholder="例：ユーザー">
+<label for="personality">性格・特徴</label><textarea id="personality" placeholder="例：落ち着いていて、率直な会話を好む"></textarea>
+<label for="style">好みの会話スタイル</label><input id="style" placeholder="例：親しみやすく自然体">
+<label for="notes">その他、AIに考慮してほしいこと</label><textarea id="notes" placeholder="例：相手の話をよく聞き、会話を広げたい"></textarea>
+<div class="actions"><button class="btn primary" id="saveProfile">プロフィールを保存</button></div>
+<p class="small" id="profileStatus">プロフィールはこのブラウザ内に保存されます。</p>
+</section>
+<section id="history">
+<h2>会話履歴</h2>
+<p class="small">過去の会話をテキストで追加するか、JSONファイルを読み込めます。ChatGPTのエクスポートJSONは形式が複雑なため、この試作版ではまずテキスト貼り付けを推奨します。</p>
+<label for="historyTitle">会話タイトル</label><input id="historyTitle" placeholder="例：友人との会話">
+<label for="historyText">会話内容</label><textarea id="historyText" placeholder="過去の会話を貼り付け…"></textarea>
+<div class="actions"><button class="btn primary" id="addHistory">履歴に追加</button><button class="btn" id="exportHistory">履歴を書き出す</button></div>
+<label for="importFile">保存済み履歴JSONを読み込む</label><input type="file" id="importFile" accept="application/json,.json">
+<div id="historyList"></div>
+</section>
+<p class="small">プライバシー：この試作版はプロフィール・履歴をブラウザのlocalStorageに保存します。AI APIへの送信はまだ行いません。Safariの履歴消去やサイトデータ削除で消える場合があるため、定期的に書き出してください。</p>
+</main>
+<footer><div class="inner">
+<button class="btn" id="boldBtn" aria-label="太字記法を挿入">✳</button>
+<button class="btn" id="editBtn" aria-label="返信候補を作成">✏️</button>
+<button class="btn send" id="copyBtn">文章をコピー</button>
+</div></footer>
+<script>
+const $=id=>document.getElementById(id);
+const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+let history=read('cia_history',[]);
+function profile(){return read('cia_profile',{nickname:'',personality:'',style:'',notes:''})}
+function showTab(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===id))}
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
+function insertBold(){
+ const el=$('composer'),s=el.selectionStart,e=el.selectionEnd,t=el.value;
+ if(s!==e){const selected=t.slice(s,e);el.setRangeText('**'+selected+'**',s,e,'end')}
+ else{el.setRangeText('****',s,e,'end');el.setSelectionRange(s+2,s+2)}
+ el.focus();
+}
+$('boldBtn').addEventListener('click',insertBold);
+$('editBtn').addEventListener('click',()=>{$('generate').click();showTab('chat')});
+$('copyBtn').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('composer').value);$('copyBtn').textContent='コピーしました'}catch{$('composer').select();document.execCommand('copy');$('copyBtn').textContent='コピーしました'}setTimeout(()=>$('copyBtn').textContent='文章をコピー',1500)});
+function loadProfile(){const p=profile();$('nickname').value=p.nickname;$('personality').value=p.personality;$('style').value=p.style;$('notes').value=p.notes}
+$('saveProfile').addEventListener('click',()=>{write('cia_profile',{nickname:$('nickname').value,personality:$('personality').value,style:$('style').value,notes:$('notes').value});$('profileStatus').textContent='保存しました。'});
+function relevantHistory(q){const words=q.toLowerCase().split(/[\\s、。,.!?！？]+/).filter(w=>w.length>1);return history.map(h=>({h,score:words.reduce((n,w)=>n+(h.text.toLowerCase().includes(w)?1:0),0)})).sort((a,b)=>b.score-a.score).slice(0,3).map(x=>x.h.text).join('\\n---\\n').slice(0,2500)}
+function makeSuggestions(){
+ const p=profile(),ctx=$('context').value.trim(),q=ctx||$('composer').value.trim(),past=relevantHistory(q);
+ if(!q){$('suggestions').innerHTML='<p class="small">先に現在の会話メモを入力してください。</p>';return}
+ const base='プロフィール：'+[p.nickname,p.personality,p.style,p.notes].filter(Boolean).join(' / ')+'\\n現在の会話：'+q+'\\n関連する過去の会話：'+(past||'なし');
+ const candidates=[
+  {title:'自然で親しみやすい',text:'そうなんだ！話してくれてありがとう。もう少し詳しく聞いてみたいな。'},
+  {title:'共感を大切にする',text:'そういうことがあったんだね。そう感じるのも自然だと思うよ。'},
+  {title:'会話を広げる',text:'なるほど！ちなみに、そのときはどんなふうに思った？'}
+ ];
+ $('suggestions').innerHTML='<div class="card"><span class="badge">参考コンテキストを反映するための試作テンプレート</span><p class="small">現段階ではAI API未接続のため、以下は固定テンプレートです。プロフィールや履歴を読み込む本格的なAI生成は、次段階で安全なサーバー経由で接続します。</p></div>';
+ candidates.forEach(c=>{const d=document.createElement('div');d.className='card';const h=document.createElement('strong');h.textContent=c.title;const para=document.createElement('p');para.textContent=c.text;const b=document.createElement('button');b.className='btn';b.textContent='この候補を入力欄に入れる';b.onclick=()=>{$('composer').value=c.text;$('composer').focus()};d.append(h,para,b);$('suggestions').append(d)});
+}
+$('generate').addEventListener('click',makeSuggestions);
+$('saveTurn').addEventListener('click',()=>{const text=$('context').value.trim();if(!text)return alert('会話メモを入力してください');history.unshift({title:'現在の会話 '+new Date().toLocaleString('ja-JP'),text,date:new Date().toISOString()});write('cia_history',history);renderHistory();alert('会話メモを保存しました')});
+$('addHistory').addEventListener('click',()=>{const text=$('historyText').value.trim();if(!text)return alert('会話内容を入力してください');history.unshift({title:$('historyTitle').value.trim()||'タイトルなし',text,date:new Date().toISOString()});write('cia_history',history);$('historyTitle').value='';$('historyText').value='';renderHistory()});
+function renderHistory(){$('historyList').innerHTML='';history.forEach((h,i)=>{const d=document.createElement('div');d.className='card';const t=document.createElement('strong');t.textContent=h.title;const p=document.createElement('p');p.textContent=h.text.slice(0,240)+(h.text.length>240?'…':'');const b=document.createElement('button');b.className='btn';b.textContent='削除';b.onclick=()=>{history.splice(i,1);write('cia_history',history);renderHistory()};d.append(t,p,b);$('historyList').append(d)})}
+$('exportHistory').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(history,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chat-input-assistant-history.json';a.click();URL.revokeObjectURL(a.href)});
+$('importFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const data=JSON.parse(await f.text());if(!Array.isArray(data))throw Error();history=[...data,...history];write('cia_history',history);renderHistory();alert('読み込みました')}catch{alert('対応している履歴JSONではありません')}e.target.value=''});
+loadProfile();renderHistory();
+</script>
+</body>
+</html>
